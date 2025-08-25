@@ -29,20 +29,7 @@ services:
       - coolify
     labels:
       - "coolify.managed=true"
-      - "traefik.enable=true"
-      - "traefik.docker.network=coolify"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.gzip.compress=true"
-      - "traefik.http.routers.archon_api_http.entryPoints=http"
-      - "traefik.http.routers.archon_api_http.rule=Host(`archon-api.cogitia.com.es`)"
-      - "traefik.http.routers.archon_api_http.middlewares=redirect-to-https"
-      - "traefik.http.routers.archon_api_https.entryPoints=https"
-      - "traefik.http.routers.archon_api_https.rule=Host(`archon-api.cogitia.com.es`)"
-      - "traefik.http.routers.archon_api_https.tls=true"
-      - "traefik.http.routers.archon_api_https.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.archon_api_https.middlewares=gzip"
-      - "traefik.http.routers.archon_api_https.service=archon_api"
-      - "traefik.http.services.archon_api.loadbalancer.server.port=8181"
+      
     command:
       - python
       - -m
@@ -140,20 +127,7 @@ services:
       - coolify
     labels:
       - "coolify.managed=true"
-      - "traefik.enable=true"
-      - "traefik.docker.network=coolify"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.gzip.compress=true"
-      - "traefik.http.routers.archon_frontend_http.entryPoints=http"
-      - "traefik.http.routers.archon_frontend_http.rule=Host(`archon-ui.cogitia.com.es`)"
-      - "traefik.http.routers.archon_frontend_http.middlewares=redirect-to-https"
-      - "traefik.http.routers.archon_frontend_https.entryPoints=https"
-      - "traefik.http.routers.archon_frontend_https.rule=Host(`archon-ui.cogitia.com.es`)"
-      - "traefik.http.routers.archon_frontend_https.tls=true"
-      - "traefik.http.routers.archon_frontend_https.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.archon_frontend_https.middlewares=gzip"
-      - "traefik.http.routers.archon_frontend_https.service=archon_frontend"
-      - "traefik.http.services.archon_frontend.loadbalancer.server.port=80"
+      
     healthcheck:
       test:
         - CMD
