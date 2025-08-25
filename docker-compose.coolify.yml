@@ -3,7 +3,7 @@
 # - Sin volúmenes de desarrollo
 # - Configura los dominios en Coolify (uno por servicio público) y selecciona el puerto interno correspondiente
 #   Ejemplos:
-#     - UI:      3737  -> ui subdominio (p. ej. archon-ui.cogitia.com.es)
+#     - UI:      80    -> ui subdominio (p. ej. archon-ui.cogitia.com.es)
 #     - API:     $ARCHON_SERVER_PORT  -> api subdominio (p. ej. archon-api.cogitia.com.es)
 #     - MCP:     $ARCHON_MCP_PORT     -> mcp subdominio (p. ej. archon-mcp.cogitia.com.es) [opcional público]
 #     - AGENTS:  $ARCHON_AGENTS_PORT  -> normalmente solo interno (no expongas dominio salvo necesidad)
@@ -28,7 +28,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ARCHON_SERVER_PORT=${ARCHON_SERVER_PORT:-8181}
       - ARCHON_MCP_PORT=${ARCHON_MCP_PORT:-8051}
-      - ARCHON_AGENTS_PORT=${ARCHON_AGENTS_PORT:-8052}
+  - ARCHON_AGENTS_PORT=${ARCHON_AGENTS_PORT:-8052}
+  - ALLOWED_INTERNAL_CIDRS=${ALLOWED_INTERNAL_CIDRS:-10.0.0.0/8,172.16.0.0/12,127.0.0.0/8,192.168.0.0/16,100.64.0.0/10} # permitir redes privadas
     networks:
       - app-network
     # No montar docker.sock en producción salvo necesidad explícita
