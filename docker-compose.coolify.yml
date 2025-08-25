@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Docker Compose para despliegue en Coolify (producción)
 # - No publica puertos al host; usa "expose" y deja que Coolify/Traefik enrute por dominio
 # - Configura dominios en Coolify con el puerto interno correcto
