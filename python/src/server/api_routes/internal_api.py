@@ -8,6 +8,7 @@ not by external clients. They provide internal functionality like credential sha
 import logging
 import os
 from typing import Any
+from ipaddress import ip_address, ip_network
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -18,35 +19,61 @@ logger = logging.getLogger(__name__)
 # Create router with internal prefix
 router = APIRouter(prefix="/internal", tags=["internal"])
 
-# Simple IP-based access control for internal endpoints
-ALLOWED_INTERNAL_IPS = [
-    "127.0.0.1",  # Localhost
-    "172.18.0.0/16",  # Docker network range
-    "archon-agents",  # Docker service name
-    "archon-mcp",  # Docker service name
+"""Simple, flexible IP-based access control for internal endpoints.
+
+By defecto permitimos rangos privados más comunes:
+- 127.0.0.0/8 (loopback)
+- 10.0.0.0/8 (muchas plataformas/overlays usan 10.x, como Coolify)
+- 172.16.0.0/12 (redes Docker típicas)
+- 192.168.0.0/16 (privadas)
+- 100.64.0.0/10 (CGNAT, algunos entornos de overlay)
+
+Se pueden añadir CIDRs adicionales con la variable de entorno ALLOWED_INTERNAL_CIDRS
+como lista separada por comas, por ejemplo: "10.0.0.0/8,172.20.0.0/16".
+"""
+
+DEFAULT_ALLOWED_CIDRS = [
+    "127.0.0.0/8",
+    "::1/128",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "100.64.0.0/10",
 ]
 
 
+def _get_allowed_cidrs() -> list[str]:
+    extra = os.getenv("ALLOWED_INTERNAL_CIDRS", "")
+    cidrs = [c.strip() for c in extra.split(",") if c.strip()]
+    return DEFAULT_ALLOWED_CIDRS + cidrs
+
+
 def is_internal_request(request: Request) -> bool:
-    """Check if request is from an internal source."""
+    """Check if request is from an internal/private source based on client IP/CIDR."""
     client_host = request.client.host if request.client else None
 
     if not client_host:
         return False
 
-    # Check if it's a Docker network IP (172.16.0.0/12 range)
-    if client_host.startswith("172."):
-        parts = client_host.split(".")
-        if len(parts) == 4:
-            second_octet = int(parts[1])
-            # Docker uses 172.16.0.0 - 172.31.255.255
-            if 16 <= second_octet <= 31:
-                logger.info(f"Allowing Docker network request from {client_host}")
-                return True
-
-    # Check if it's localhost
-    if client_host in ["127.0.0.1", "::1", "localhost"]:
+    # Normalize common localhost names
+    if client_host in ["localhost"]:
         return True
+
+    try:
+        ip = ip_address(client_host)
+    except ValueError:
+        # If not a plain IP (very unlikely here), deny
+        logger.warning(f"Internal check: could not parse client host as IP: {client_host}")
+        return False
+
+    for cidr in _get_allowed_cidrs():
+        try:
+            if ip in ip_network(cidr, strict=False):
+                # Log once at INFO for visibility during setup
+                logger.info(f"Allowing internal request from {client_host} in {cidr}")
+                return True
+        except ValueError:
+            logger.debug(f"Skipping invalid CIDR in ALLOWED_INTERNAL_CIDRS: {cidr}")
 
     return False
 
