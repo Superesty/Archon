@@ -1,0 +1,31 @@
+# Build & static serve para producción con Vite
+
+FROM node:18-alpine AS builder
+WORKDIR /app
+
+# Dependencias del sistema requeridas por algunas libs
+RUN apk add --no-cache python3 make g++ git
+
+# Copiar manifiestos e instalar deps (incluye dev deps para build)
+COPY package*.json ./
+RUN npm ci
+
+# Inyectar URL del API en build (Vite usa variables prefijadas con VITE_)
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
+
+# Copiar código y construir
+COPY . .
+RUN npm run build
+
+# Etapa final: Nginx para servir estáticos
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Healthcheck simple vía HTTP
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1
+
+# Nginx escucha 80 por defecto
+EXPOSE 80
+
+# Imagen final ligera sirviendo /usr/share/nginx/html

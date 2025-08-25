@@ -1,15 +1,14 @@
-# Docker Compose Profiles Strategy:
-# - No profile: All services start by default when running 'docker compose up'
-# - "backend": Starts only backend services (server, mcp, agents) for hybrid development
-# - "frontend": Starts only the frontend UI service  
-# - "full": Starts all services for complete Docker deployment (same as no profile)
-# Use --profile flag to control which services start:
-#   docker compose up                      # All services (default behavior)
-#   docker compose --profile backend up    # Backend only for hybrid dev
-#   docker compose --profile full up       # Everything in Docker (same as default)
+# Docker Compose para despliegue en Coolify (producción)
+# - No publica puertos al host; usa "expose" y deja que Coolify/Traefik enrute por dominio
+# - Sin volúmenes de desarrollo
+# - Configura los dominios en Coolify (uno por servicio público) y selecciona el puerto interno correspondiente
+#   Ejemplos:
+#     - UI:      3737  -> ui subdominio (p. ej. archon-ui.cogitia.com.es)
+#     - API:     $ARCHON_SERVER_PORT  -> api subdominio (p. ej. archon-api.cogitia.com.es)
+#     - MCP:     $ARCHON_MCP_PORT     -> mcp subdominio (p. ej. archon-mcp.cogitia.com.es) [opcional público]
+#     - AGENTS:  $ARCHON_AGENTS_PORT  -> normalmente solo interno (no expongas dominio salvo necesidad)
 
 services:
-  # Server Service (FastAPI + Socket.IO + Crawling)
   archon-server:
     build:
       context: ./python
@@ -18,8 +17,8 @@ services:
         BUILDKIT_INLINE_CACHE: 1
         ARCHON_SERVER_PORT: ${ARCHON_SERVER_PORT:-8181}
     container_name: archon-server
-    ports:
-      - "${ARCHON_SERVER_PORT:-8181}:${ARCHON_SERVER_PORT:-8181}"
+    expose:
+      - "${ARCHON_SERVER_PORT:-8181}"
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
@@ -32,12 +31,7 @@ services:
       - ARCHON_AGENTS_PORT=${ARCHON_AGENTS_PORT:-8052}
     networks:
       - app-network
-  # Volúmenes solo para desarrollo local, no necesarios en producción/Coolify
-  # - /var/run/docker.sock:/var/run/docker.sock # Docker socket para MCP (solo si usas control de contenedores desde dentro)
-  # - ./python/src:/app/src # Hot reload (desarrollo)
-  # - ./python/tests:/app/tests # Tests (desarrollo)
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    # No montar docker.sock en producción salvo necesidad explícita
     command:
       [
         "python",
@@ -47,8 +41,7 @@ services:
         "--host",
         "0.0.0.0",
         "--port",
-        "${ARCHON_SERVER_PORT:-8181}",
-        "--reload",
+        "${ARCHON_SERVER_PORT:-8181}"
       ]
     healthcheck:
       test:
@@ -63,7 +56,6 @@ services:
       retries: 3
       start_period: 40s
 
-  # Lightweight MCP Server Service (HTTP-based)
   archon-mcp:
     build:
       context: ./python
@@ -72,8 +64,8 @@ services:
         BUILDKIT_INLINE_CACHE: 1
         ARCHON_MCP_PORT: ${ARCHON_MCP_PORT:-8051}
     container_name: archon-mcp
-    ports:
-      - "${ARCHON_MCP_PORT:-8051}:${ARCHON_MCP_PORT:-8051}"
+    expose:
+      - "${ARCHON_MCP_PORT:-8051}"
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
@@ -81,7 +73,6 @@ services:
       - SERVICE_DISCOVERY_MODE=docker_compose
       - TRANSPORT=sse
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      # MCP needs to know where to find other services
       - API_SERVICE_URL=http://archon-server:${ARCHON_SERVER_PORT:-8181}
       - AGENTS_SERVICE_URL=http://archon-agents:${ARCHON_AGENTS_PORT:-8052}
       - ARCHON_MCP_PORT=${ARCHON_MCP_PORT:-8051}
@@ -92,8 +83,6 @@ services:
     depends_on:
       - archon-server
       - archon-agents
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     healthcheck:
       test:
         [
@@ -105,9 +94,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s # Give dependencies time to start
+      start_period: 60s
 
-  # AI Agents Service (ML/Reranking)
   archon-agents:
     build:
       context: ./python
@@ -116,8 +104,8 @@ services:
         BUILDKIT_INLINE_CACHE: 1
         ARCHON_AGENTS_PORT: ${ARCHON_AGENTS_PORT:-8052}
     container_name: archon-agents
-    ports:
-      - "${ARCHON_AGENTS_PORT:-8052}:${ARCHON_AGENTS_PORT:-8052}"
+    expose:
+      - "${ARCHON_AGENTS_PORT:-8052}"
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
@@ -141,28 +129,24 @@ services:
       retries: 3
       start_period: 40s
 
-  # Frontend
   archon-frontend:
-    build: ./archon-ui-main
+    build:
+      context: ./archon-ui-main
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_URL: ${VITE_API_URL}
     container_name: archon-ui
-    ports:
-      - "${ARCHON_UI_PORT:-3737}:3737"
+    expose:
+      - "80"
     environment:
-      - VITE_API_URL=http://${HOST:-localhost}:${ARCHON_SERVER_PORT:-8181}
-      - VITE_ARCHON_SERVER_PORT=${ARCHON_SERVER_PORT:-8181}
-      - ARCHON_SERVER_PORT=${ARCHON_SERVER_PORT:-8181}
-      - HOST=${HOST:-localhost}
-      - PROD=${PROD:-false}
+      - VITE_API_URL=${VITE_API_URL}
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3737"]
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3
-  # Volúmenes solo para desarrollo local, no necesarios en producción/Coolify
-  # - ./archon-ui-main/src:/app/src
-  # - ./archon-ui-main/public:/app/public
     depends_on:
       - archon-server
 
