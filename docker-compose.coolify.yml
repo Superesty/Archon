@@ -26,6 +26,24 @@ services:
       ALLOWED_INTERNAL_CIDRS: ${ALLOWED_INTERNAL_CIDRS:-10.0.0.0/8,172.16.0.0/12,127.0.0.0/8,192.168.0.0/16,100.64.0.0/10}
     networks:
       - app-network
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+      # Middlewares
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.gzip.compress=true
+      # HTTP -> redirige a HTTPS
+      - traefik.http.routers.archon_api_http.entryPoints=http
+      - traefik.http.routers.archon_api_http.rule=Host(`archon-api.cogitia.com.es`)
+      - traefik.http.routers.archon_api_http.middlewares=redirect-to-https
+      # HTTPS
+      - traefik.http.routers.archon_api_https.entryPoints=https
+      - traefik.http.routers.archon_api_https.rule=Host(`archon-api.cogitia.com.es`)
+      - traefik.http.routers.archon_api_https.tls=true
+      - traefik.http.routers.archon_api_https.middlewares=gzip
+      - traefik.http.routers.archon_api_https.service=archon_api
+      - "traefik.http.services.archon_api.loadbalancer.server.port=${ARCHON_SERVER_PORT:-8181}"
     command: ["python", "-m", "uvicorn", "src.server.main:socket_app", "--host", "0.0.0.0", "--port", "${ARCHON_SERVER_PORT:-8181}"]
     healthcheck:
       test: ["CMD", "sh", "-c", 'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:${ARCHON_SERVER_PORT:-8181}/health'')"']
@@ -108,6 +126,24 @@ services:
       VITE_API_URL: ${VITE_API_URL}
     networks:
       - app-network
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+      # Middlewares
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.gzip.compress=true
+      # HTTP -> redirige a HTTPS
+      - traefik.http.routers.archon_frontend_http.entryPoints=http
+      - traefik.http.routers.archon_frontend_http.rule=Host(`archon-ui.cogitia.com.es`)
+      - traefik.http.routers.archon_frontend_http.middlewares=redirect-to-https
+      # HTTPS
+      - traefik.http.routers.archon_frontend_https.entryPoints=https
+      - traefik.http.routers.archon_frontend_https.rule=Host(`archon-ui.cogitia.com.es`)
+      - traefik.http.routers.archon_frontend_https.tls=true
+      - traefik.http.routers.archon_frontend_https.middlewares=gzip
+      - traefik.http.routers.archon_frontend_https.service=archon_frontend
+      - traefik.http.services.archon_frontend.loadbalancer.server.port=80
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost/"]
       interval: 30s
@@ -119,3 +155,5 @@ services:
 networks:
   app-network:
     driver: bridge
+  coolify:
+    external: true
